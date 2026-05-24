@@ -1,0 +1,45 @@
+name: Developer Task
+description: Track internal development tasks, implementation steps, and technical debt.
+labels: ["task", "planned"]
+body:
+    - type: markdown
+      attributes:
+          value: |
+              **Development Task**
+              Ensure this task is modular, strictly typed, and includes a clear testing strategy.
+    - type: input
+      id: dependencies
+      attributes:
+          label: Dependencies / Blocked By
+          description: List any issue numbers that must be completed before this task can begin (e.g., \#4, \#5).
+          placeholder: "None"
+      validations:
+          required: true
+    - type: textarea
+      id: context
+      attributes:
+          label: Context
+          description: Why does this task exist and what part of the PRD or architecture does it fulfill?
+      validations:
+          required: true
+    - type: textarea
+      id: acceptance-criteria
+      attributes:
+          label: Acceptance Criteria
+          description: What exact conditions must be met for this task to be considered done?
+          value: |
+              - [ ]
+              - [ ]
+              - [ ] Automated tests pass
+      validations:
+          required: true
+    - type: textarea
+      id: technical-tasks
+      attributes:
+          label: Technical Tasks & Implementation Details
+          description: List the specific code changes, native framework methods to use, and testing strategy (e.g., pytest, curl commands).
+          value: |
+              - [ ]
+              - [ ]
+      validations:
+          required: true
