@@ -1,0 +1,27 @@
+syntax = "proto3";
+package trading;
+
+// Updated to reflect the new nested /trading path
+option go_package = "github.com/hsrvms/binance-bot2/go-oms/internal/pb/trading";
+
+// Injected by Go Ingestion / Replayer
+message MarketTick {
+  string symbol = 1;
+  double price = 2;
+  double volume = 3;
+  int64 event_timestamp_ms = 4;
+}
+
+// Emitted by Python Engine
+message IntentSignal {
+  string symbol = 1;
+  double target_exposure = 2;
+  string strategy_reasoning = 3;
+  int64 signal_timestamp_ms = 4;
+}
+
+// Emitted by Go OMS on Startup Request
+message PortfolioState {
+  map<string, double> balances = 1;
+  int64 state_timestamp_ms = 2;
+}
