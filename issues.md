@@ -26,11 +26,11 @@ Establishes the unified development environment to ensure the toolchain is isola
 **Context**: Defines the immutable source of truth for inter-process communication between the Go ingestion layer, Python engine, and Go OMS. Prevents contract drift via containerized compilation.
 **Acceptance Criteria**:
 - [ ] `events.proto` encompasses `MarketTick`, `IntentSignal`, and `PortfolioState`.
-- [ ] Bash script accurately compiles Go and Python bindings into their respective directories simultaneously.
+- [ ] Bash script accurately compiles Go and Python bindings into their respective directories simultaneously using native Devcontainer binaries.
 - [ ] Automated tests pass (GitHub Action enforces `git diff` on the generated `/pb` folders to reject uncommitted schema updates).
 **Technical Tasks & Implementation Details**:
 - [ ] Create `/contracts/events.proto` strictly typing the payloads, ensuring `event_timestamp_ms` is present.
-- [ ] Write `generate_protos.sh` using the `namely/protoc-all:latest` Docker image.
+- [ ] Write `generate_protos.sh` using the native `protoc` compiler built into the devcontainer to instantly generate Go structs and Python classes with `mypy` type stubs.
 - [ ] Create a GitHub Actions workflow to run the script upon every push.
 
 # Epic 2: Data Ingestion & Strategy Engine

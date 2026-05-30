@@ -1,0 +1,44 @@
+name: CI - Protobuf Contracts
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+        branches: [main]
+
+jobs:
+    enforce-contracts:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout Code
+              uses: actions/checkout@v4
+
+            - name: Setup Go
+              uses: actions/setup-go@v5
+              with:
+                  go-version: "1.26"
+
+            - name: Setup Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.14"
+
+            - name: Install System Protoc
+              run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+            - name: Install Python Plugins
+              run: pip install protobuf mypy-protobuf types-protobuf
+
+            - name: Install Go Plugins
+              run: go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+
+            - name: Run Protobuf Generator
+              run: |
+                  # Ensure Go binaries are in the path for the CI runner
+                  export PATH="$PATH:$(go env GOPATH)/bin"
+                  chmod +x generate_protos.sh
+                  ./generate_protos.sh
+
+            - name: Enforce Sync (Git Diff)
+              run: |
+                  git diff --exit-code || (echo "❌ Error: Generated Protobuf files are out of sync with events.proto. Please run ./generate_protos.sh locally and commit the results." && exit 1)
