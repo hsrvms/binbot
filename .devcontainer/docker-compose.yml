@@ -1,0 +1,44 @@
+name: binbot
+
+services:
+  devcontainer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ..:/workspace:cached
+    network_mode: service:nats
+    command: /bin/sh -c "while sleep 1000; do :; done"
+
+  nats:
+    image: nats:2.14-alpine
+    command: ["-js", "--store_dir", "/data", "-m", "8222"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - nats-data:/data
+    networks:
+      - bot-network
+
+  postgres:
+    image: postgres:18.4-alpine
+    environment:
+      POSTGRES_USER: bot_user
+      POSTGRES_PASSWORD: bot_password
+      POSTGRES_DB: bot_ledger
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql
+      - ../db-init:/docker-entrypoint-initdb.d
+    networks:
+      - bot-network
+
+volumes:
+  nats-data:
+  pg-data:
+
+networks:
+  bot-network:
+    driver: bridge

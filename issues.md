@@ -1,17 +1,25 @@
 # Epic 1: Infrastructure & Core Contracts
 
 ## Issue 1: Monorepo & Devcontainer Initialization
-**Dependencies / Blocked By**: None
-**Context**: Establishes the unified development environment (Epic 1) to ensure the Go toolchain, Python runtime, and `protoc` compiler are isolated, reproducible, and identical across local and CI environments.
-**Acceptance Criteria**:
+**Development Task**
+Ensure this task is modular, strictly typed, and includes a clear testing strategy.
+
+### Dependencies / Blocked By
+None
+
+### Context
+Establishes the unified development environment to ensure the toolchain is isolated, reproducible, and identical across local and CI environments.
+
+### Acceptance Criteria
 - [ ] `docker-compose.yml` successfully spins up NATS JetStream and PostgreSQL.
 - [ ] `.devcontainer` configuration successfully builds and attaches to the workspace.
-- [ ] Python (with `mypy` for strict typing) and Go are globally available within the container.
+- [ ] Python (with `mypy`) and Go are globally available within the container.
 - [ ] Automated tests pass (basic ping/connection checks to NATS and DB infrastructure).
-**Technical Tasks & Implementation Details**:
-- [ ] Create `docker-compose.yml` defining `nats:latest` (with JetStream enabled via the `-js` flag) and `postgres:15-alpine`.
-- [ ] Define `.devcontainer/devcontainer.json` utilizing a base image that supports both `go` and `python3`.
-- [ ] Include an initialization script in the compose file to establish the basic PostgreSQL database schema for the Ledger.
+
+### Technical Tasks & Implementation Details
+- [ ] Create `docker-compose.yml` defining `nats:latest` (with JetStream flag) and `postgres:18.4-alpine`.
+- [ ] Define `.devcontainer/devcontainer.json` utilizing a base image natively supporting Go 1.26 and Python 3.14.5
+- [ ] Include an initialization script to establish the basic PostgreSQL DB schema for the Ledger.
 
 ## Issue 2: Protobuf Data Contracts & CI Enforcement
 **Dependencies / Blocked By**: #1
