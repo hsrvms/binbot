@@ -12,37 +12,44 @@ A decoupled, containerized trading infrastructure utilizing Go for high-frequenc
 
 The entire monorepo is managed via a single Devcontainer binding to a shared Docker-Compose network.
 
-1. Ensure Docker is running locally.
-2. Ensure the Devcontainer CLI is installed globally (e.g., `npm install -g @devcontainers/cli`).
-3. From the repository root, build and start the environment:
+1. Ensure the Devcontainer CLI is installed globally.
+2. From the repository root, build and start the environment:
 ```bash
 devcontainer up --workspace-folder .
 ```
-4. Drop into the interactive shell (as the `vscode` user) to run your commands:
+3. Drop into the interactive shell (as the `vscode` user):
 ```bash
 devcontainer exec --workspace-folder . bash
+```
+4. Install all cross-language dependencies and compile Protobufs:
+```bash
+make setup
 ```
 
 *Note: The Devcontainer image will automatically install the native Go and Python binaries, as well as the Protobuf compilers. No external SDKs are required on your host machine.*
 
-## 2. Compiling Protobuf Data Contracts
-
-All inter-process communication is strictly typed via Protocol Buffers. Any time `contracts/trading/events.proto` is modified, you must regenerate the bindings natively:
-
+## 2. Testing & Quality Assurance
+This monorepo utilizes strict TDD. To run the full test suite across both Go and Python ecosystems:
 ```bash
-./generate_protos.sh
+make test
 ```
+Note: Python tests automatically resolve imports by injecting the PYTHONPATH via the Makefile.
+
 *A GitHub Action strictly enforces that all generated code matches the `.proto` source before any PR can be merged.*
 
-## 3. Running the Go Ingestion Engine
+3. Execution Commands
+Start the respective engines using the Makefile commands, which automatically load configuration from the .env file.
 
-The Go Ingestor connects to the Binance Testnet WebSocket, normalizes JSON into Protobufs, and publishes directly to NATS JetStream.
-
-To start the engine locally:
+Run the Go Ingestor:
 ```bash
-cd go-oms
-go run cmd/ingestor/main.go
+make run-ingestor
 ```
+
+Run the Python Engine:
+```bash
+make run-engine
+```
+
 *Configuration uses environment variables (e.g., `NATS_URL`, `BINANCE_WS_URL`) with safe local defaults.*
 
 ## 4. Validating Local Data Throughput (NATS CLI)
@@ -59,3 +66,6 @@ sudo mv nats /usr/local/bin/
 ```bash
 nats sub "market.data.BTCUSDT" --server="nats://nats:4222"
 ```
+
+
+pip install --break-system-packages pytest nats-py
