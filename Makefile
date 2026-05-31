@@ -31,6 +31,12 @@ test-py:
 	@echo "--- Running Python Tests ---"
 	PYTHONPATH=python-engine python -m pytest python-engine/tests/ -v
 
+.PHONY: typecheck-py
+
+typecheck-py:
+	@echo "--- Running Mypy Strict Type Check ---"
+	cd python-engine && python -m mypy .
+
 .PHONY: run-ingestor run-engine sub-nats
 
 run-ingestor:
