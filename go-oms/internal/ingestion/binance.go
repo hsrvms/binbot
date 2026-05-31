@@ -14,22 +14,42 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+type Publisher interface {
+	Publish(subj string, data []byte, opts ...nats.PubOpt) (*nats.PubAck, error)
+}
+
+type FlexInt int64
+
+func (fi *FlexInt) UnmarshalJSON(b []byte) error {
+	s := string(b)
+	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
+		s = s[1 : len(s)-1]
+	}
+	i, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return err
+	}
+	*fi = FlexInt(i)
+	return nil
+}
+
 type BinanceTrade struct {
-	EventTime int64  `json:"E"`
-	Symbol    string `json:"s"`
-	Price     string `json:"p"`
-	Quantity  string `json:"q"`
+	EventType string  `json:"e"`
+	EventTime FlexInt `json:"E"`
+	Symbol    string  `json:"s"`
+	Price     string  `json:"p"`
+	Quantity  string  `json:"q"`
 }
 
 type Streamer struct {
 	wsURL string
-	js    nats.JetStreamContext
+	pub   Publisher
 }
 
-func NewStreamer(wsURL string, js nats.JetStreamContext) *Streamer {
+func NewStreamer(wsURL string, pub Publisher) *Streamer {
 	return &Streamer{
 		wsURL: wsURL,
-		js:    js,
+		pub:   pub,
 	}
 }
 
@@ -42,7 +62,7 @@ func (s *Streamer) Start(ctx context.Context) {
 		default:
 			log.Printf("Connecting to Binance WebSocket: %s", s.wsURL)
 			if err := s.connectAndRead(ctx); err != nil {
-				log.Printf("WebSocket connection dropped: %v. Reconnecting in 3 seconds...", err)
+				log.Printf("Ingestion halted: %v. Reconnecting in 3 seconds...", err)
 				time.Sleep(3 * time.Second)
 			}
 		}
@@ -59,15 +79,22 @@ func (s *Streamer) connectAndRead(ctx context.Context) error {
 	}
 	defer conn.Close()
 
+	readCtx, readCancel := context.WithCancel(ctx)
+	defer readCancel()
+
+	go func() {
+		<-readCtx.Done()
+		conn.Close()
+	}()
+
 	log.Println("Successfully connected to Binance Websocket.")
 
 	for {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-
 		_, message, err := conn.ReadMessage()
 		if err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			return fmt.Errorf("%w: %v", ErrWebSocketRead, err)
 		}
 
@@ -84,7 +111,7 @@ func (s *Streamer) connectAndRead(ctx context.Context) error {
 			Symbol:           rawTrade.Symbol,
 			Price:            price,
 			Volume:           volume,
-			EventTimestampMs: rawTrade.EventTime,
+			EventTimestampMs: int64(rawTrade.EventTime),
 		}
 
 		payload, err := proto.Marshal(tick)
@@ -94,7 +121,7 @@ func (s *Streamer) connectAndRead(ctx context.Context) error {
 		}
 
 		subject := fmt.Sprintf("market.data.%s", rawTrade.Symbol)
-		_, err = s.js.Publish(subject, payload)
+		_, err = s.pub.Publish(subject, payload)
 		if err != nil {
 			log.Printf("%v: subject %s: %v", ErrPublishStream, subject, err)
 		}

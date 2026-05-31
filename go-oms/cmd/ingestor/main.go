@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -9,10 +10,17 @@ import (
 
 	"github.com/hsrvms/binbot/go-oms/internal/config"
 	"github.com/hsrvms/binbot/go-oms/internal/ingestion"
+	"github.com/hsrvms/binbot/go-oms/internal/logger"
 	"github.com/nats-io/nats.go"
 )
 
 func main() {
+	rotator, err := logger.NewLineRotator("binbot.log", 1000)
+	if err != nil {
+		log.Fatalf("Failed to initialize logger: %v", err)
+	}
+	log.SetOutput(io.MultiWriter(os.Stdout, rotator))
+
 	cfg := config.Load()
 
 	nc, err := nats.Connect(cfg.NatsURL)
