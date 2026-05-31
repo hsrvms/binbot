@@ -1,22 +1,20 @@
 {
-  "name": "Lightweight Connected Bot Environment",
-  "dockerComposeFile": "docker-compose.yml",
-  "service": "devcontainer",
-  "workspaceFolder": "/workspace",
-  "containerEnv": {
-    "TERM": "xterm-256color"
-  },
-  "customizations": {
-    "vscode": {
-      "settings": {
-        "go.useLanguageServer": true,
-        "python.defaultInterpreterPath": "/usr/bin/python3"
-      },
-      "extensions": [
-        "golang.go",
-        "ms-python.python",
-        "ms-azuretools.vscode-docker"
-      ]
-    }
-  }
+	"name": "Lightweight Connected Bot Environment",
+	"dockerComposeFile": "docker-compose.yml",
+	"service": "devcontainer",
+	"workspaceFolder": "/workspace",
+	"remoteUser": "vscode",
+	"containerEnv": {
+		"TERM": "xterm-256color",
+	},
+	"customizations": {
+		"vscode": {
+			"settings": {
+				"go.useLanguageServer": true,
+				"python.defaultInterpreterPath": "/usr/bin/python3",
+			},
+			"extensions": ["golang.go", "ms-python.python", "ms-azuretools.vscode-docker"],
+		},
+	},
+	"postCreateCommand": "pip install --break-system-packages mypy numpy",
 }
