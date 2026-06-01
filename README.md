@@ -69,3 +69,10 @@ nats sub "market.data.BTCUSDT" --server="nats://nats:4222"
 
 
 pip install --break-system-packages pytest nats-py
+
+# Validating Discord Webhook Formatting
+export DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/your_id/your_token"
+
+curl -H "Content-Type: application/json" \
+     -d '{"content": "🚀 **Trade Executed**\nSymbol: BTCUSDT\nPrice: 65000.50\nReason: Golden Cross: SMA10 (65000) > SMA50 (64000)"}' \
+     $DISCORD_WEBHOOK_URL
