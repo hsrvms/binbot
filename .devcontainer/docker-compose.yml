@@ -24,8 +24,8 @@ services:
   postgres:
     image: postgres:18.4-alpine
     environment:
-      POSTGRES_USER: bot_user
-      POSTGRES_PASSWORD: bot_password
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
       POSTGRES_DB: bot_ledger
     ports:
       - "5432:5432"

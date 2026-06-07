@@ -27,7 +27,20 @@ async def main() -> None:
 
     buffer = RingBuffer(capacity=1000)
 
+    logger.info("Requesting exact portfolio state from Go OMS")
     current_exposure: float = 0.0
+
+    try:
+        state_msg = await nc.request("oms.state.get", b"", timeout=5.0)
+        state = events_pb2.PortfolioState()
+        state.ParseFromString(state_msg.data)
+
+        current_exposure = state.balances.get("BTCUSDT", 0.0)
+        logger.info(f"State Hydrated. Current BTCUSDT Exposure: {current_exposure}")
+    except Exception as e:
+        logger.error(f"Failed to hydrate state from OMS. Shutting down to prevent desync: {e}")
+        await nc.close()
+        return
 
     async def message_handler(msg: Any) -> None:
         nonlocal current_exposure
