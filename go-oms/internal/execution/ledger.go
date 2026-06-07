@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -22,9 +23,8 @@ func NewLedger(db DBPool) *Ledger {
 	return &Ledger{db: db}
 }
 
-// GetBalances aggregates the total executed quantity for each symbol.
 func (l *Ledger) GetBalances(ctx context.Context) (map[string]float64, error) {
-	query := `SELECT symbol, SUM(executed_qty) FROM order_ledger GROUP BY symbol`
+	query := `SELECT asset, amount FROM balances`
 	rows, err := l.db.Query(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrLedgerQuery, err)
@@ -33,12 +33,12 @@ func (l *Ledger) GetBalances(ctx context.Context) (map[string]float64, error) {
 
 	balances := make(map[string]float64)
 	for rows.Next() {
-		var symbol string
-		var totalQty float64
-		if err := rows.Scan(&symbol, &totalQty); err != nil {
+		var asset string
+		var amount float64
+		if err := rows.Scan(&asset, &amount); err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrLedgerScan, err)
 		}
-		balances[symbol] = totalQty
+		balances[asset] = amount
 	}
 
 	if err := rows.Err(); err != nil {
@@ -48,7 +48,6 @@ func (l *Ledger) GetBalances(ctx context.Context) (map[string]float64, error) {
 	return balances, nil
 }
 
-// Record fill atomically commits a trade execution to the PostgreSQL ledger.
 func (l *Ledger) RecordFill(ctx context.Context, symbol string, qty, price float64, reasoning string) error {
 	tx, err := l.db.Begin(ctx)
 	if err != nil {
@@ -61,15 +60,26 @@ func (l *Ledger) RecordFill(ctx context.Context, symbol string, qty, price float
 		}
 	}()
 
-	query := `
-		INSERT INTO order_ledger (symbol, executed_price, executed_qty, strategy_reasoning, timestamp_ms)
+	timestamp := time.Now().UnixMilli()
+
+	tradeQuery := `
+		INSERT INTO trades (symbol, price, quantity, status, event_timestamp_ms)
 		VALUES ($1, $2, $3, $4, $5)
 	`
-
-	timestamp := time.Now().UnixMilli()
-	_, err = tx.Exec(ctx, query, symbol, price, qty, reasoning, timestamp)
+	_, err = tx.Exec(ctx, tradeQuery, symbol, price, math.Abs(qty), "FILLED", timestamp)
 	if err != nil {
-		return fmt.Errorf("%w: insert failed: %v", ErrLedgerCommit, err)
+		return fmt.Errorf("%w: trade insert failed: %v", ErrLedgerCommit, err)
+	}
+
+	balanceQuery := `
+		INSERT INTO balances (asset, amount)
+		VALUES ($1, $2)
+		ON CONFLICT (asset)
+		DO UPDATE SET amount = balances.amount + EXCLUDED.amount, updated_at = CURRENT_TIMESTAMP
+	`
+	_, err = tx.Exec(ctx, balanceQuery, symbol, qty)
+	if err != nil {
+		return fmt.Errorf("%w: balance upsert failed: %v", ErrLedgerCommit, err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
