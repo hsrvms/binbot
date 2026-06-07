@@ -20,9 +20,15 @@ func TestLedger_RecordFill_AtomicCommit_Success(t *testing.T) {
 	ctx := context.Background()
 
 	mock.ExpectBegin()
-	mock.ExpectExec("INSERT INTO order_ledger").
-		WithArgs("BTCUSDT", 65000.0, 1.0, "Golden Cross", pgxmock.AnyArg()).
+
+	mock.ExpectExec("INSERT INTO trades").
+		WithArgs("BTCUSDT", 65000.0, 1.0, "FILLED", pgxmock.AnyArg()).
 		WillReturnResult(pgxmock.NewResult("INSERT", 1))
+
+	mock.ExpectExec("INSERT INTO balances").
+		WithArgs("BTCUSDT", 1.0).
+		WillReturnResult(pgxmock.NewResult("INSERT", 1))
+
 	mock.ExpectCommit()
 
 	err = ledger.RecordFill(ctx, "BTCUSDT", 1.0, 65000.0, "Golden Cross")
@@ -46,8 +52,9 @@ func TestLedger_RecordFill_RollbackOnQueryFailure(t *testing.T) {
 	ctx := context.Background()
 
 	mock.ExpectBegin()
-	mock.ExpectExec("INSERT INTO order_ledger").
-		WithArgs("BTCUSDT", 65000.0, 1.0, "Golden Cross", pgxmock.AnyArg()).
+
+	mock.ExpectExec("INSERT INTO trades").
+		WithArgs("BTCUSDT", 65000.0, 1.0, "FILLED", pgxmock.AnyArg()).
 		WillReturnError(errors.New("simulated constraint violation"))
 
 	mock.ExpectRollback()

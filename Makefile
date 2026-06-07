@@ -25,7 +25,7 @@ test: test-go test-py
 
 test-go:
 	@echo "--- Running Go Tests ---"
-	cd go-oms && go test ./... -v
+	cd go-oms && go test ./...
 
 test-py:
 	@echo "--- Running Python Tests ---"
@@ -49,4 +49,4 @@ run-engine:
 
 sub-nats:
 	@echo "--- Subscribing to NATS JetStream ---"
-	nats sub "market.data.BTCUSDT" --server="nats://nats:4222"
+	nats sub "market.data.BTCUSDT" --server="nats://localhost:4222"
