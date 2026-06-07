@@ -57,13 +57,16 @@ async def main() -> None:
             target = current_exposure
             reasoning = ""
 
-            if short_sma > long_sma and current_exposure == 0.0:
+            is_flat = current_exposure < 0.0001
+            is_long = current_exposure >= 0.0001
+
+            if short_sma > long_sma and is_flat:
                 target = 1.0
                 reasoning = (
                     f"Golden Cross: SMA10 ({short_sma:.2f}) > SMA50 ({long_sma:.2f})"
                 )
 
-            elif short_sma < long_sma and current_exposure == 1.0:
+            elif short_sma < long_sma and is_long:
                 target = 0.0
                 reasoning = (
                     f"Death Cross: SMA10 ({short_sma:.2f}) < SMA50 ({long_sma:.2f})"
