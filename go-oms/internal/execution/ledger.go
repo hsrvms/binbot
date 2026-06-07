@@ -11,6 +11,7 @@ import (
 
 type DBPool interface {
 	Begin(context.Context) (pgx.Tx, error)
+	Query(context.Context, string, ...any) (pgx.Rows, error)
 }
 
 type Ledger struct {
@@ -21,6 +22,33 @@ func NewLedger(db DBPool) *Ledger {
 	return &Ledger{db: db}
 }
 
+// GetBalances aggregates the total executed quantity for each symbol.
+func (l *Ledger) GetBalances(ctx context.Context) (map[string]float64, error) {
+	query := `SELECT symbol, SUM(executed_qty) FROM order_ledger GROUP BY symbol`
+	rows, err := l.db.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrLedgerQuery, err)
+	}
+	defer rows.Close()
+
+	balances := make(map[string]float64)
+	for rows.Next() {
+		var symbol string
+		var totalQty float64
+		if err := rows.Scan(&symbol, &totalQty); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrLedgerScan, err)
+		}
+		balances[symbol] = totalQty
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%w: row iteration error: %v", ErrLedgerQuery, err)
+	}
+
+	return balances, nil
+}
+
+// Record fill atomically commits a trade execution to the PostgreSQL ledger.
 func (l *Ledger) RecordFill(ctx context.Context, symbol string, qty, price float64, reasoning string) error {
 	tx, err := l.db.Begin(ctx)
 	if err != nil {
