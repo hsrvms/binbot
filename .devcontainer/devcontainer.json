@@ -5,16 +5,15 @@
 	"workspaceFolder": "/workspace",
 	"remoteUser": "vscode",
 	"containerEnv": {
-		"TERM": "xterm-256color",
+		"TERM": "xterm-256color"
 	},
 	"customizations": {
 		"vscode": {
 			"settings": {
 				"go.useLanguageServer": true,
-				"python.defaultInterpreterPath": "/usr/bin/python3",
+				"python.defaultInterpreterPath": "/usr/bin/python3"
 			},
-			"extensions": ["golang.go", "ms-python.python", "ms-azuretools.vscode-docker"],
-		},
-	},
-	"postCreateCommand": "pip install --break-system-packages mypy numpy",
+			"extensions": ["golang.go", "ms-python.python", "ms-azuretools.vscode-docker"]
+		}
+	}
 }

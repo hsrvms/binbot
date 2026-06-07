@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
+	"time"
 
 	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/proto"
@@ -11,18 +13,16 @@ import (
 	"github.com/hsrvms/binbot/go-oms/internal/pb/trading"
 )
 
-// ExchangeClient defines the contract for Binance execution, allowing mocks in CI.
 type ExchangeClient interface {
-	ExecuteIOCLimit(ctx context.Context, symbol string, qty float64) (float64, float64, error)
-	ExecuteMarket(ctx context.Context, symbol string, qty float64) (float64, float64, error)
+	ExecuteIOCLimit(ctx context.Context, side string, symbol string, qty float64) (float64, float64, error)
+	ExecuteMarket(ctx context.Context, side string, symbol string, qty float64) (float64, float64, error)
 }
 
-// LedgerWriter defines the contract for database commits.
 type LedgerWriter interface {
 	RecordFill(ctx context.Context, symbol string, qty, price float64, reasoning string) error
+	GetBalances(ctx context.Context) (map[string]float64, error)
 }
 
-// WebhookBroadcaster defines the contract for outbound alerts.
 type WebhookBroadcaster interface {
 	Broadcast(message string) error
 }
@@ -34,7 +34,6 @@ type Orchestrator struct {
 	exchange ExchangeClient
 }
 
-// NewOrchestrator now accepts interfaces, making it fully testable via Dependency Injection.
 func NewOrchestrator(js nats.JetStreamContext, ledger LedgerWriter, webhook WebhookBroadcaster, exchange ExchangeClient) *Orchestrator {
 	return &Orchestrator{
 		js:       js,
@@ -44,41 +43,64 @@ func NewOrchestrator(js nats.JetStreamContext, ledger LedgerWriter, webhook Webh
 	}
 }
 
-// ExecuteIntent isolates the Binance logic: IOC limit order with a Market order fallback.
+const MaxTestnetUSDTSize = 500.0
+
 func (o *Orchestrator) ExecuteIntent(ctx context.Context, intent *trading.IntentSignal) error {
-	iocQty, iocPrice, err := o.exchange.ExecuteIOCLimit(ctx, intent.Symbol, intent.TargetExposure)
+	// 1. Fetch current database/ledger balances to check actual state
+	balances, err := o.ledger.GetBalances(ctx)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrExchangeIOC, err)
+		return fmt.Errorf("failed to retrieve ledger balances: %w", err)
 	}
 
-	totalQty := iocQty
-	totalValue := iocQty * iocPrice
+	currentBTC := balances[intent.Symbol]
 
-	remainingQty := intent.TargetExposure - iocQty
-	if remainingQty > 0.00000001 {
-		mktQty, mktPrice, err := o.exchange.ExecuteMarket(ctx, intent.Symbol, remainingQty)
-		if err != nil {
-			return fmt.Errorf("%w: %v", ErrExchangeMarket, err)
-		}
-		totalQty += mktQty
-		totalValue += (mktQty * mktPrice)
+	currentPrice := 61500.0
+
+	var targetBTC float64
+	if intent.TargetExposure > 0.0 {
+		targetBTC = MaxTestnetUSDTSize / currentPrice
+	} else {
+		targetBTC = 0.0
 	}
 
-	if totalQty == 0 {
-		return ErrZeroQuantity
+	tradeDelta := targetBTC - currentBTC
+
+	if math.Abs(tradeDelta) < 0.0001 {
+		log.Printf("Current position satisfies target exposure for %s. Skipping execution.", intent.Symbol)
+		return nil
 	}
 
-	vwap := totalValue / totalQty
+	var side string
+	var finalQty float64
 
-	if err := o.ledger.RecordFill(ctx, intent.Symbol, totalQty, vwap, intent.StrategyReasoning); err != nil {
-
-		return err
+	if tradeDelta > 0 {
+		side = "BUY"
+		finalQty = tradeDelta
+	} else {
+		side = "SELL"
+		finalQty = math.Abs(tradeDelta)
 	}
 
+	log.Printf("Translating exposure change to order: %s %f %s at ~%.2f USDT", side, finalQty, intent.Symbol, currentPrice)
+
+	mktQty, mktPrice, err := o.exchange.ExecuteMarket(ctx, side, intent.Symbol, finalQty)
+	if err != nil {
+		return fmt.Errorf("exchange failed to execute order: %w", err)
+	}
+
+	ledgerQty := mktQty
+	if side == "SELL" {
+		ledgerQty = -mktQty
+	}
+
+	if err := o.ledger.RecordFill(ctx, intent.Symbol, ledgerQty, mktPrice, intent.StrategyReasoning); err != nil {
+		return fmt.Errorf("failed to log execution to database: %w", err)
+	}
+
+	log.Printf("Successfully synchronized ledger. Position change committed for %f %s.", ledgerQty, intent.Symbol)
 	return nil
 }
 
-// Start binds the NATS stream to the execution logic.
 func (o *Orchestrator) Start(ctx context.Context) error {
 	sub, err := o.js.Subscribe("strategy.intent", func(msg *nats.Msg) {
 		var intent trading.IntentSignal
@@ -92,7 +114,7 @@ func (o *Orchestrator) Start(ctx context.Context) error {
 
 		if err := o.ExecuteIntent(ctx, &intent); err != nil {
 			log.Printf("CRITICAL Execution Failure: %v", err)
-			msg.Nak()
+			msg.NakWithDelay(5 * time.Second)
 			return
 		}
 
