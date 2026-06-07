@@ -25,7 +25,7 @@ test: test-go test-py
 
 test-go:
 	@echo "--- Running Go Tests ---"
-	cd go-oms && go test ./... -v
+	cd go-oms && go test ./...
 
 test-py:
 	@echo "--- Running Python Tests ---"
