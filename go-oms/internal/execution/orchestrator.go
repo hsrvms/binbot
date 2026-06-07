@@ -43,58 +43,61 @@ func NewOrchestrator(js nats.JetStreamContext, ledger LedgerWriter, webhook Webh
 	}
 }
 
+const MaxTestnetUSDTSize = 500.0
+
 func (o *Orchestrator) ExecuteIntent(ctx context.Context, intent *trading.IntentSignal) error {
+	// 1. Fetch current database/ledger balances to check actual state
 	balances, err := o.ledger.GetBalances(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get balances for delta calculation: %w", err)
+		return fmt.Errorf("failed to retrieve ledger balances: %w", err)
 	}
-	currentQty := balances[intent.Symbol]
 
-	delta := intent.TargetExposure - currentQty
-	if math.Abs(delta) < 0.00000001 {
-		log.Printf("Target exposure for %s already met. Ignoring intent.", intent.Symbol)
+	currentBTC := balances[intent.Symbol]
+
+	currentPrice := 61500.0
+
+	var targetBTC float64
+	if intent.TargetExposure > 0.0 {
+		targetBTC = MaxTestnetUSDTSize / currentPrice
+	} else {
+		targetBTC = 0.0
+	}
+
+	tradeDelta := targetBTC - currentBTC
+
+	if math.Abs(tradeDelta) < 0.0001 {
+		log.Printf("Current position satisfies target exposure for %s. Skipping execution.", intent.Symbol)
 		return nil
 	}
 
-	side := "BUY"
-	if delta < 0 {
+	var side string
+	var finalQty float64
+
+	if tradeDelta > 0 {
+		side = "BUY"
+		finalQty = tradeDelta
+	} else {
 		side = "SELL"
+		finalQty = math.Abs(tradeDelta)
 	}
-	tradeQty := math.Abs(delta)
 
-	iocQty, iocPrice, err := o.exchange.ExecuteIOCLimit(ctx, side, intent.Symbol, tradeQty)
+	log.Printf("Translating exposure change to order: %s %f %s at ~%.2f USDT", side, finalQty, intent.Symbol, currentPrice)
+
+	mktQty, mktPrice, err := o.exchange.ExecuteMarket(ctx, side, intent.Symbol, finalQty)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrExchangeIOC, err)
+		return fmt.Errorf("exchange failed to execute order: %w", err)
 	}
 
-	totalQty := iocQty
-	totalValue := iocQty * iocPrice
-
-	remainingQty := tradeQty - iocQty
-	if remainingQty > 0.00000001 {
-		mktQty, mktPrice, err := o.exchange.ExecuteMarket(ctx, side, intent.Symbol, remainingQty)
-		if err != nil {
-			return fmt.Errorf("%w: %v", ErrExchangeMarket, err)
-		}
-		totalQty += mktQty
-		totalValue += (mktQty * mktPrice)
-	}
-
-	if totalQty == 0 {
-		return ErrZeroQuantity
-	}
-
-	vwap := totalValue / totalQty
-
-	ledgerQty := totalQty
+	ledgerQty := mktQty
 	if side == "SELL" {
-		ledgerQty = -totalQty
+		ledgerQty = -mktQty
 	}
 
-	if err := o.ledger.RecordFill(ctx, intent.Symbol, ledgerQty, vwap, intent.StrategyReasoning); err != nil {
-		return err
+	if err := o.ledger.RecordFill(ctx, intent.Symbol, ledgerQty, mktPrice, intent.StrategyReasoning); err != nil {
+		return fmt.Errorf("failed to log execution to database: %w", err)
 	}
 
+	log.Printf("Successfully synchronized ledger. Position change committed for %f %s.", ledgerQty, intent.Symbol)
 	return nil
 }
 

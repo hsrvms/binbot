@@ -3,9 +3,11 @@ package config
 import "os"
 
 type AppConfig struct {
-	NatsURL string
-	WsURL   string
-	DBURL   string
+	NatsURL   string
+	WsURL     string
+	DBURL     string
+	APIKey    string
+	SecretKey string
 }
 
 func Load() *AppConfig {
@@ -25,8 +27,10 @@ func Load() *AppConfig {
 	}
 
 	return &AppConfig{
-		NatsURL: natsURL,
-		WsURL:   wsURL,
-		DBURL:   dbURL,
+		NatsURL:   natsURL,
+		WsURL:     wsURL,
+		DBURL:     dbURL,
+		APIKey:    os.Getenv("BINANCE_API_KEY"),
+		SecretKey: os.Getenv("BINANCE_SECRET_KEY"),
 	}
 }

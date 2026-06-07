@@ -8,28 +8,15 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nats-io/nats.go"
+
 	"github.com/hsrvms/binbot/go-oms/internal/config"
+	"github.com/hsrvms/binbot/go-oms/internal/database"
 	"github.com/hsrvms/binbot/go-oms/internal/execution"
 	"github.com/hsrvms/binbot/go-oms/internal/ingestion"
 	"github.com/hsrvms/binbot/go-oms/internal/logger"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nats-io/nats.go"
 )
-
-// --- TEMPORARY MOCK FOR MVP END-TO-END TESTING ---
-type MockBinance struct{}
-
-func (m *MockBinance) ExecuteIOCLimit(ctx context.Context, side string, symbol string, qty float64) (float64, float64, error) {
-	log.Printf("[MOCK BINANCE] Executed %s IOC Limit: %f %s @ $65000.00", side, qty, symbol)
-	return qty, 65000.0, nil
-}
-
-func (m *MockBinance) ExecuteMarket(ctx context.Context, side string, symbol string, qty float64) (float64, float64, error) {
-	log.Printf("[MOCK BINANCE] Executed %s Market Fallback: %f %s @ $65100.00", side, qty, symbol)
-	return qty, 65100.0, nil
-}
-
-// -------------------------------------------------
 
 func main() {
 	rotator, err := logger.NewLineRotator("binbot.log", 1000)
@@ -41,6 +28,10 @@ func main() {
 	cfg := config.Load()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	if err := database.RunDatabaseMigrations(cfg.DBURL); err != nil {
+		log.Fatalf("CRITICAL: Database migration failed: %v", err)
+	}
 
 	dbPool, err := pgxpool.New(ctx, cfg.DBURL)
 	if err != nil {
@@ -60,9 +51,7 @@ func main() {
 	}
 
 	streamName := "MARKET"
-	_, err = js.StreamInfo(streamName)
-	if err != nil {
-		log.Printf("Stream %s not found, provisioning...", streamName)
+	if _, err = js.StreamInfo(streamName); err != nil {
 		_, err = js.AddStream(&nats.StreamConfig{
 			Name:     streamName,
 			Subjects: []string{"market.data.>"},
@@ -74,19 +63,33 @@ func main() {
 		}
 	}
 
+	strategyStreamName := "STRATEGY"
+	if _, err = js.StreamInfo(strategyStreamName); err != nil {
+		_, err = js.AddStream(&nats.StreamConfig{
+			Name:     strategyStreamName,
+			Subjects: []string{"strategy.intent"},
+			Storage:  nats.FileStorage,
+			MaxAge:   0,
+		})
+		if err != nil {
+			log.Fatalf("Failed to provision JetStream %s: %v", strategyStreamName, err)
+		}
+	}
+
 	streamer := ingestion.NewStreamer(cfg.WsURL, js)
 	ledger := execution.NewLedger(dbPool)
 	stateServer := execution.NewStateServer(nc, ledger)
 
-	// TODO: Build exchange and webhook
-	mockExchange := &MockBinance{}
-	orchestrator := execution.NewOrchestrator(js, ledger, nil, mockExchange)
+	binanceClient := execution.NewBinanceClient("", cfg.APIKey, cfg.SecretKey)
+
+	// TODO: Build webhook
+	orchestrator := execution.NewOrchestrator(js, ledger, nil, binanceClient)
 
 	go streamer.Start(ctx)
 	go stateServer.Start(ctx)
 	go orchestrator.Start(ctx)
 
-	log.Println("Binbot OMS and Igestion Engine Running...")
+	log.Println("Binbot OMS and Ingestion Engine Running...")
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)

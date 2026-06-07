@@ -15,4 +15,4 @@ CREATE TABLE IF NOT EXISTS trades (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_trades_timestamp ON trades(event_timestamp_ms);
+CREATE INDEX IF NOT EXISTS idx_trades_timestamp ON trades(event_timestamp_ms);
