@@ -49,4 +49,4 @@ run-engine:
 
 sub-nats:
 	@echo "--- Subscribing to NATS JetStream ---"
-	nats sub "market.data.BTCUSDT" --server="nats://nats:4222"
+	nats sub "market.data.BTCUSDT" --server="nats://localhost:4222"
