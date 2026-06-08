@@ -47,10 +47,11 @@ func (m *MockLedger) GetBalances(ctx context.Context) (map[string]float64, error
 	return m.Balances, nil
 }
 
-func TestExecuteIntent_FullIOCFill(t *testing.T) {
+func TestExecuteIntent_MarketBuy_Success(t *testing.T) {
+	expectedQty := 500.0 / 61500.0
 	exchange := &MockExchange{
-		IOCFillQty:  1.0,
-		IOCAvgPrice: 65000.0,
+		MarketFillQty: expectedQty,
+		MarketPrice:   61500.0,
 	}
 	ledger := &MockLedger{
 		Balances: map[string]float64{"BTCUSDT": 0.0},
@@ -68,27 +69,27 @@ func TestExecuteIntent_FullIOCFill(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
-	if ledger.RecordedQty != 1.0 {
-		t.Errorf("Expected ledger to record 1.0 qty, got %f", ledger.RecordedQty)
+	if ledger.RecordedQty != expectedQty {
+		t.Errorf("Expected ledger to record %f qty, got %f", expectedQty, ledger.RecordedQty)
 	}
 }
 
-func TestExecuteIntent_PartialIOC_WithMarketFallback(t *testing.T) {
+func TestExecuteIntent_MarketSell_Success(t *testing.T) {
+	expectedQty := 500.0 / 61500.0
 	exchange := &MockExchange{
-		IOCFillQty:    0.4,
-		IOCAvgPrice:   65000.0,
-		MarketFillQty: 0.6,
-		MarketPrice:   65100.0,
+		MarketFillQty: expectedQty,
+		MarketPrice:   61500.0,
 	}
+	// Setup: We already own the fractional amount
 	ledger := &MockLedger{
-		Balances: map[string]float64{"BTCUSDT": 0.0},
+		Balances: map[string]float64{"BTCUSDT": expectedQty},
 	}
 	orchestrator := execution.NewOrchestrator(nil, ledger, nil, exchange)
 
 	intent := &trading.IntentSignal{
 		Symbol:            "BTCUSDT",
-		TargetExposure:    1.0,
-		StrategyReasoning: "Golden Cross",
+		TargetExposure:    0.0,
+		StrategyReasoning: "Death Cross",
 	}
 
 	err := orchestrator.ExecuteIntent(context.Background(), intent)
@@ -96,17 +97,15 @@ func TestExecuteIntent_PartialIOC_WithMarketFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
-	if ledger.RecordedQty != 1.0 {
-		t.Errorf("Expected ledger to record 1.0 total qty, got %f", ledger.RecordedQty)
-	}
-	if ledger.RecordedPrice != 65060.0 {
-		t.Errorf("Expected ledger to record VWAP of 65060.0, got %f", ledger.RecordedPrice)
+	// Assert: Sells are recorded as negative quantities in the ledger
+	if ledger.RecordedQty != -expectedQty {
+		t.Errorf("Expected ledger to record %f total qty, got %f", -expectedQty, ledger.RecordedQty)
 	}
 }
 
 func TestExecuteIntent_ExchangeFailure(t *testing.T) {
 	exchange := &MockExchange{
-		IOCError: errors.New("binance API timeout"),
+		MarketError: errors.New("binance API timeout"),
 	}
 	ledger := &MockLedger{
 		Balances: map[string]float64{"BTCUSDT": 0.0},
@@ -123,9 +122,11 @@ func TestExecuteIntent_ExchangeFailure(t *testing.T) {
 }
 
 func TestExecuteIntent_ZeroDelta_IgnoresExecution(t *testing.T) {
+	expectedQty := 500.0 / 61500.0
 	exchange := &MockExchange{}
+	// Setup: We already own the fractional amount, and the intent asks for 1.0 exposure
 	ledger := &MockLedger{
-		Balances: map[string]float64{"BTCUSDT": 1.0},
+		Balances: map[string]float64{"BTCUSDT": expectedQty},
 	}
 	orchestrator := execution.NewOrchestrator(nil, ledger, nil, exchange)
 
