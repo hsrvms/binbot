@@ -76,3 +76,13 @@ export DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/your_id/your_token"
 curl -H "Content-Type: application/json" \
      -d '{"content": "🚀 **Trade Executed**\nSymbol: BTCUSDT\nPrice: 65000.50\nReason: Golden Cross: SMA10 (65000) > SMA50 (64000)"}' \
      $DISCORD_WEBHOOK_URL
+
+
+## 5. Backtest data
+``` sh
+wget https://data.binance.vision/data/spot/daily/trades/BTCUSDT/BTCUSDT-trades-2026-06-01.zip
+
+unzip BTCUSDT-trades-2026-06-01.zip
+
+mv BTCUSDT-trades-2026-06-01.csv real_trades.csv
+```

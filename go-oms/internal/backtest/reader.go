@@ -26,21 +26,31 @@ type HistoricalTrade struct {
 
 type TradeReader struct {
 	csvReader *csv.Reader
+	isFirst   bool
 }
 
 func NewTradeReader(r io.Reader) *TradeReader {
 	return &TradeReader{
 		csvReader: csv.NewReader(r),
+		isFirst:   true,
 	}
 }
 
 func (tr *TradeReader) Read() (*HistoricalTrade, error) {
-	record, err := tr.csvReader.Read()
-	if err != nil {
-		return nil, err
-	}
+	for {
+		record, err := tr.csvReader.Read()
+		if err != nil {
+			return nil, err
+		}
 
-	return ParseTradeRow(record)
+		if tr.isFirst {
+			tr.isFirst = false
+			if record[0] == "id" || record[0] == "trade_id" {
+				continue
+			}
+		}
+		return ParseTradeRow(record)
+	}
 }
 
 func ParseTradeRow(record []string) (*HistoricalTrade, error) {

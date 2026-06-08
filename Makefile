@@ -43,6 +43,10 @@ run-ingestor:
 	@echo "--- Starting Go Ingestion Engine ---"
 	cd go-oms && go run cmd/ingestor/main.go
 
+run-replayer:
+	@echo "--- Starting Go Replayer ---"
+	cd go-oms && go run cmd/replayer/main.go -file=real_trades.csv -symbol=BTCUSDT -speed=0.0
+
 run-engine:
 	@echo "--- Starting Python Strategy Engine ---"
 	PYTHONPATH=python-engine python python-engine/main.py

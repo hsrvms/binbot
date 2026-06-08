@@ -85,6 +85,7 @@ func main() {
 	// TODO: Build webhook
 	orchestrator := execution.NewOrchestrator(js, ledger, nil, binanceClient)
 
+	// INFO: deactivate the streamer for backtesting
 	go streamer.Start(ctx)
 	go stateServer.Start(ctx)
 	go orchestrator.Start(ctx)
