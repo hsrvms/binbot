@@ -14,7 +14,6 @@ import (
 	"github.com/hsrvms/binbot/go-oms/internal/config"
 	"github.com/hsrvms/binbot/go-oms/internal/database"
 	"github.com/hsrvms/binbot/go-oms/internal/execution"
-	"github.com/hsrvms/binbot/go-oms/internal/ingestion"
 	"github.com/hsrvms/binbot/go-oms/internal/logger"
 )
 
@@ -76,7 +75,7 @@ func main() {
 		}
 	}
 
-	streamer := ingestion.NewStreamer(cfg.WsURL, js)
+	// streamer := ingestion.NewStreamer(cfg.WsURL, js)
 	ledger := execution.NewLedger(dbPool)
 	stateServer := execution.NewStateServer(nc, ledger)
 
@@ -86,7 +85,7 @@ func main() {
 	orchestrator := execution.NewOrchestrator(js, ledger, nil, binanceClient)
 
 	// INFO: deactivate the streamer for backtesting
-	go streamer.Start(ctx)
+	// go streamer.Start(ctx)
 	go stateServer.Start(ctx)
 	go orchestrator.Start(ctx)
 

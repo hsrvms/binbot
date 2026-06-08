@@ -126,7 +126,7 @@ func (o *Orchestrator) Start(ctx context.Context) error {
 		}
 
 		msg.Ack()
-	}, nats.Durable("OMS_EXECUTION_WORKER"), nats.ManualAck())
+	}, nats.Durable("OMS_EXECUTION_WORKER"), nats.ManualAck(), nats.AckWait(10*time.Minute))
 
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrIntentSubscription, err)

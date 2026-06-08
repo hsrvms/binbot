@@ -8,7 +8,6 @@ from nats.js.client import JetStreamContext
 from nats.js.errors import NotFoundError
 
 from pb.trading import events_pb2
-from strategy.buffer import RingBuffer
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("PythonEngine")
@@ -25,8 +24,6 @@ async def main() -> None:
         logger.info("Stream STRATEGY not found, provisioning...")
         await js.add_stream(name="STRATEGY", subjects=["strategy.intent"])  # pyright: ignore[reportUnknownMemberType]
 
-    buffer = RingBuffer(capacity=1000)
-
     logger.info("Requesting exact portfolio state from Go OMS")
     current_exposure: float = 0.0
 
@@ -38,54 +35,74 @@ async def main() -> None:
         current_exposure = state.balances.get("BTCUSDT", 0.0)
         logger.info(f"State Hydrated. Current BTCUSDT Exposure: {current_exposure}")
     except Exception as e:
-        logger.error(f"Failed to hydrate state from OMS. Shutting down to prevent desync: {e}")
+        logger.error(
+            f"Failed to hydrate state from OMS. Shutting down to prevent desync: {e}"
+        )
         await nc.close()
         return
 
+    current_candle_minute: int | None = None
+    candle_close_price: float = 0.0
+    history_10: list[float] = []
+    history_50: list[float] = []
+
     async def message_handler(msg: Any) -> None:
         nonlocal current_exposure
+        nonlocal current_candle_minute, candle_close_price
+        nonlocal history_10, history_50
 
         tick = events_pb2.MarketTick()
         tick.ParseFromString(msg.data)
 
-        buffer.append(price=tick.price, volume=tick.volume)
+        tick_minute = tick.event_timestamp_ms // 60000
 
-        short_sma = buffer.get_sma(10)
-        long_sma = buffer.get_sma(50)
+        if current_candle_minute is None:
+            current_candle_minute = tick_minute
 
-        if short_sma > 0.0 and long_sma > 0.0:
-            target = current_exposure
-            reasoning = ""
+        if tick_minute > current_candle_minute:
+            history_10.append(candle_close_price)
+            history_50.append(candle_close_price)
 
-            is_flat = current_exposure < 0.0001
-            is_long = current_exposure >= 0.0001
+            if len(history_10) > 10:
+                history_10.pop(0)
+            if len(history_50) > 50:
+                history_50.pop(0)
 
-            if short_sma > long_sma and is_flat:
-                target = 1.0
-                reasoning = (
-                    f"Golden Cross: SMA10 ({short_sma:.2f}) > SMA50 ({long_sma:.2f})"
-                )
+            if len(history_50) == 50:
+                sma10 = sum(history_10) / 10.0
+                sma50 = sum(history_50) / 50.0
 
-            elif short_sma < long_sma and is_long:
-                target = 0.0
-                reasoning = (
-                    f"Death Cross: SMA10 ({short_sma:.2f}) < SMA50 ({long_sma:.2f})"
-                )
+                is_flat = current_exposure < 0.0001
+                is_long = current_exposure >= 0.0001
 
-            if target != current_exposure:
-                current_exposure = target
+                target = current_exposure
+                reasoning = ""
 
-                intent = events_pb2.IntentSignal(
-                    symbol=tick.symbol,
-                    target_exposure=target,
-                    strategy_reasoning=reasoning,
-                    signal_timestamp_ms=int(time.time() * 1000),
-                )
+                if sma10 > sma50 and is_flat:
+                    target = 1.0
+                    reasoning = f"Golden Cross: SMA10 ({sma10:.2f}) > SMA50 ({sma50:.2f})"
+                elif sma10 < sma50 and is_long:
+                    target = 0.0
+                    reasoning = f"Death Cross: SMA10 ({sma10:.2f}) < SMA50 ({sma50:.2f})"
 
-                await js.publish("strategy.intent", intent.SerializeToString())
-                logger.info(
-                    f"Published IntentSignal -> Target: {target} | Reason: {reasoning}"
-                )
+                if target != current_exposure:
+                    current_exposure = target
+
+                    intent = events_pb2.IntentSignal(
+                        symbol=tick.symbol,
+                        target_exposure=target,
+                        strategy_reasoning=reasoning,
+                        signal_timestamp_ms=int(time.time() * 1000),
+                    )
+
+                    await js.publish("strategy.intent", intent.SerializeToString())
+                    logger.info(
+                        f"Published IntentSignal -> Target: {target} | Reason: {reasoning}"
+                    )
+
+            current_candle_minute = tick_minute
+
+        candle_close_price = tick.price
 
         await msg.ack()
 

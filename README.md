@@ -81,8 +81,6 @@ curl -H "Content-Type: application/json" \
 ## 5. Backtest data
 ``` sh
 wget https://data.binance.vision/data/spot/daily/trades/BTCUSDT/BTCUSDT-trades-2026-06-01.zip
-
 unzip BTCUSDT-trades-2026-06-01.zip
-
 mv BTCUSDT-trades-2026-06-01.csv real_trades.csv
 ```

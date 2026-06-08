@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"math"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -66,7 +65,7 @@ func (l *Ledger) RecordFill(ctx context.Context, symbol string, qty, price float
 		INSERT INTO trades (symbol, price, quantity, status, event_timestamp_ms)
 		VALUES ($1, $2, $3, $4, $5)
 	`
-	_, err = tx.Exec(ctx, tradeQuery, symbol, price, math.Abs(qty), "FILLED", timestamp)
+	_, err = tx.Exec(ctx, tradeQuery, symbol, price, qty, "FILLED", timestamp)
 	if err != nil {
 		return fmt.Errorf("%w: trade insert failed: %v", ErrLedgerCommit, err)
 	}
